@@ -79,6 +79,20 @@
   nav.tabs button.active { background: var(--amber); color: #1c1300; }
   nav.tabs button:not(.active):hover { color: var(--text); }
 
+  /* Pantallas anchas: menú vertical fijo a la izquierda. En el celular
+     queda horizontal arriba (vertical ocuparía media pantalla). */
+  .layout { display: block; }
+  .contenido { min-width: 0; }
+  @media (min-width: 760px) {
+    #appView.wrap { max-width: 1180px; }
+    .layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px; align-items: start; }
+    nav.tabs {
+      flex-direction: column; gap: 4px; margin-bottom: 0;
+      position: sticky; top: 16px; overflow-x: visible;
+    }
+    nav.tabs button { flex: none; min-width: 0; text-align: left; padding: 11px 14px; }
+  }
+
   .panel {
     background: var(--bg-panel);
     border: 1px solid var(--line);
@@ -196,21 +210,25 @@
     </div>
   </header>
 
-  <nav class="tabs">
-    <button data-tab="resumen" class="active">Resumen</button>
-    <button data-tab="inventario">Inventario</button>
-    <button data-tab="ventas">Ventas</button>
-    <button data-tab="abonos">Abonos</button>
-    <button data-tab="clientes">Clientes</button>
-    <button data-tab="gastos">Gastos</button>
-  </nav>
+  <div class="layout">
+    <nav class="tabs">
+      <button data-tab="resumen" class="active">Resumen</button>
+      <button data-tab="inventario">Inventario</button>
+      <button data-tab="ventas">Ventas</button>
+      <button data-tab="abonos">Abonos</button>
+      <button data-tab="clientes">Clientes</button>
+      <button data-tab="gastos">Gastos</button>
+    </nav>
 
-  <div id="tab-resumen"></div>
-  <div id="tab-inventario" style="display:none"></div>
-  <div id="tab-ventas" style="display:none"></div>
-  <div id="tab-abonos" style="display:none"></div>
-  <div id="tab-clientes" style="display:none"></div>
-  <div id="tab-gastos" style="display:none"></div>
+    <main class="contenido">
+      <div id="tab-resumen"></div>
+      <div id="tab-inventario" style="display:none"></div>
+      <div id="tab-ventas" style="display:none"></div>
+      <div id="tab-abonos" style="display:none"></div>
+      <div id="tab-clientes" style="display:none"></div>
+      <div id="tab-gastos" style="display:none"></div>
+    </main>
+  </div>
 </div>
 
 <div id="modalRoot"></div>
