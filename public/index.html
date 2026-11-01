@@ -83,9 +83,9 @@
      queda horizontal arriba (vertical ocuparía media pantalla). */
   .layout { display: block; }
   .contenido { min-width: 0; }
-  @media (min-width: 760px) {
+  @media (min-width: 600px) {
     #appView.wrap { max-width: 1180px; }
-    .layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: start; }
     nav.tabs {
       flex-direction: column; gap: 4px; margin-bottom: 0;
       position: sticky; top: 16px; overflow-x: visible;
