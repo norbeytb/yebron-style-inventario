@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+graphify-out/
+.claude/launch.json
+# Respaldos con datos reales de clientes: no van al repo.
+respaldo*.json

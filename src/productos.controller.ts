@@ -32,11 +32,6 @@ export class ProductosController {
     return this.productosService.vender(id, dto);
   }
 
-  @Patch(':id/abonar')
-  abonar(@Param('id', ParseIntPipe) id: number, @Body() dto: { monto: number }): Promise<Producto> {
-    return this.productosService.abonar(id, dto?.monto);
-  }
-
   @Patch(':id/revertir-venta')
   revertirVenta(@Param('id', ParseIntPipe) id: number): Promise<Producto> {
     return this.productosService.revertirVenta(id);

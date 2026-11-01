@@ -5,7 +5,8 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/main",
-    "start:dev": "nest start --watch"
+    "start:dev": "nest start --watch",
+    "importar": "node dist/importar-respaldo.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

@@ -24,16 +24,20 @@
 //   Excel "2025"/"2026" (ventas): Fecha Compra, Nombre Cliente, Unidades,
 //     Venta, Costo, Envio, Ganancia, Abono, Resta  →  acá: fecha_compra
 //     (ya estaba desde que se agregó al inventario), cliente, fecha_venta,
-//     valor_venta, abono. "Ganancia" y "Resta" NO se guardan — se calculan
-//     al vuelo (ganancia = valor_venta - costo - envio; resta = valor_venta
-//     - abono) para que nunca queden desactualizadas si se corrige un dato.
+//     valor_venta. "Abono" sale de sumar los pagos de la tabla abonos (uno
+//     por fila, con fecha y nota — ver esquema.ts). "Ganancia" y "Resta" NO
+//     se guardan — se calculan al vuelo (ganancia = valor_venta - costo -
+//     envio; resta = valor_venta - abono) para que nunca queden
+//     desactualizadas si se corrige un dato.
 //   "Bodega" (de las dos hojas) no se incluyó — en el Excel está mezclado
 //   con el tema de vendedores/dónde está guardado el par, que Norbey pidió
 //   dejar afuera de esta primera versión. Si hace falta más adelante, se
 //   puede agregar como una columna de texto libre sin romper nada de esto.
 
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { Pool } from 'pg';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PoolClient } from 'pg';
+import { DbService } from './db.service';
+import { fechaOpcional, formatearFecha, hoyColombia, numeroNoNegativo, texto } from './utilidades';
 
 export interface Producto {
   id: number;
@@ -51,6 +55,18 @@ export interface Producto {
   valorVenta: number | null;
   abono: number;
   creadoEn: string;
+}
+
+export interface Abono {
+  id: number;
+  productoId: number;
+  cliente: string | null;
+  talla: string;
+  referencia: string;
+  monto: number;
+  fecha: string;
+  nota: string | null;
+  tipo: 'inicial' | 'abono' | 'saldo-anterior';
 }
 
 export interface CrearProductoDto {
@@ -82,95 +98,28 @@ export interface EditarProductoDto {
   descripcion?: string;
 }
 
+export interface CrearAbonoDto {
+  productoId: number;
+  monto: number;
+  fecha?: string;
+  nota?: string;
+}
+
+// Cada producto con su total abonado (suma de la tabla abonos).
+const SELECT_PRODUCTOS = `
+  SELECT p.*, COALESCE(s.total, 0) AS abono
+  FROM productos p
+  LEFT JOIN (SELECT producto_id, SUM(monto) AS total FROM abonos GROUP BY producto_id) s ON s.producto_id = p.id
+`;
+
 @Injectable()
-export class ProductosService implements OnModuleInit {
-  private readonly logger = new Logger(ProductosService.name);
-  private pool: Pool | null = null;
-
-  private configurado(): boolean {
-    return !!process.env.DATABASE_URL;
-  }
-
-  async onModuleInit() {
-    if (!this.configurado()) {
-      this.logger.warn('DATABASE_URL no está configurada — el inventario no va a funcionar hasta que se agregue el plugin de PostgreSQL en Railway.');
-      return;
-    }
-    this.pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    try {
-      await this.pool.query(`
-        CREATE TABLE IF NOT EXISTS productos (
-          id SERIAL PRIMARY KEY,
-          fecha_compra DATE,
-          referencia TEXT,
-          talla TEXT NOT NULL,
-          costo NUMERIC NOT NULL DEFAULT 0,
-          envio NUMERIC NOT NULL DEFAULT 0,
-          precio_venta_sugerido NUMERIC,
-          imagen TEXT,
-          descripcion TEXT,
-          estado TEXT NOT NULL DEFAULT 'disponible',
-          cliente TEXT,
-          fecha_venta DATE,
-          valor_venta NUMERIC,
-          abono NUMERIC NOT NULL DEFAULT 0,
-          creado_en TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-      `);
-      this.logger.log('Conectado a PostgreSQL — tabla "productos" lista.');
-    } catch (error) {
-      this.logger.error('No se pudo conectar/crear la tabla de productos: ' + (error as Error).message);
-      this.pool = null;
-    }
-  }
-
-  private async exigirExistente(id: number): Promise<void> {
-    const resultado = await this.requerirPool().query(`SELECT 1 FROM productos WHERE id = $1`, [id]);
-    if (!resultado.rows[0]) {
-      throw new NotFoundException('No existe ese producto.');
-    }
-  }
-
-  private requerirPool(): Pool {
-    if (!this.pool) {
-      throw new NotFoundException('El inventario no está disponible: falta configurar la base de datos en el servidor.');
-    }
-    return this.pool;
-  }
-
-  // El driver "pg" devuelve las columnas DATE como objetos Date de JS (no
-  // como texto) — un Date.toString() da algo tipo "Thu Oct 01 2026 00:00:00
-  // GMT+0000...", NO el "2026-10-01" que necesita el frontend (ordenar,
-  // comparar meses, mostrar con fmtDate). Este helper cubre los dos casos
-  // (Date de verdad, o ya viniera como texto) y siempre devuelve YYYY-MM-DD.
-  private formatearFecha(valor: any): string | null {
-    if (!valor) return null;
-    if (valor instanceof Date) {
-      // OJO: "pg" arma este Date en hora LOCAL del servidor a partir del
-      // DATE que guardó Postgres (no en UTC) — por eso se leen año/mes/día
-      // con getFullYear()/getMonth()/getDate() (componentes locales) y NO
-      // con toISOString() (que convierte a UTC y, si el servidor corriera
-      // en una zona horaria con offset distinto a 0, podría correr la
-      // fecha un día para atrás o adelante).
-      const año = valor.getFullYear();
-      const mes = String(valor.getMonth() + 1).padStart(2, '0');
-      const dia = String(valor.getDate()).padStart(2, '0');
-      return `${año}-${mes}-${dia}`;
-    }
-    return String(valor).slice(0, 10);
-  }
-
-  // Fecha de HOY en Colombia (YYYY-MM-DD). El servidor de Railway corre en
-  // UTC, así que new Date().toISOString() después de las 7 pm hora
-  // colombiana ya daría la fecha de mañana.
-  private hoyColombia(): string {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
-  }
+export class ProductosService {
+  constructor(private readonly db: DbService) {}
 
   private mapearFila(fila: any): Producto {
     return {
       id: fila.id,
-      fechaCompra: this.formatearFecha(fila.fecha_compra),
+      fechaCompra: formatearFecha(fila.fecha_compra),
       referencia: fila.referencia || '',
       talla: fila.talla,
       costo: Number(fila.costo) || 0,
@@ -180,43 +129,72 @@ export class ProductosService implements OnModuleInit {
       descripcion: fila.descripcion || null,
       estado: fila.estado,
       cliente: fila.cliente || null,
-      fechaVenta: this.formatearFecha(fila.fecha_venta),
+      fechaVenta: formatearFecha(fila.fecha_venta),
       valorVenta: fila.valor_venta !== null ? Number(fila.valor_venta) : null,
       abono: Number(fila.abono) || 0,
       creadoEn: fila.creado_en,
     };
   }
 
-  async listar(): Promise<Producto[]> {
-    const pool = this.requerirPool();
-    const resultado = await pool.query(`SELECT * FROM productos ORDER BY creado_en DESC`);
-    return resultado.rows.map((fila) => this.mapearFila(fila));
+  private mapearAbono(fila: any): Abono {
+    return {
+      id: fila.id,
+      productoId: fila.producto_id,
+      cliente: fila.cliente || null,
+      talla: fila.talla,
+      referencia: fila.referencia || '',
+      monto: Number(fila.monto) || 0,
+      fecha: formatearFecha(fila.fecha),
+      nota: fila.nota || null,
+      tipo: fila.tipo,
+    };
   }
 
-  async crear(dto: CrearProductoDto): Promise<Producto> {
-    const pool = this.requerirPool();
-    if (!dto.talla || !String(dto.talla).trim()) {
-      throw new BadRequestException('Falta la talla.');
+  private async obtener(id: number, client?: PoolClient): Promise<Producto> {
+    const resultado = await (client || this.db.pool()).query(`${SELECT_PRODUCTOS} WHERE p.id = $1`, [id]);
+    if (!resultado.rows[0]) {
+      throw new NotFoundException('No existe ese producto.');
     }
-    const resultado = await pool.query(
-      `INSERT INTO productos (fecha_compra, referencia, talla, costo, envio, precio_venta_sugerido, imagen, descripcion, estado)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'disponible') RETURNING *`,
-      [
-        dto.fechaCompra || null,
-        (dto.referencia || '').trim() || null,
-        dto.talla.trim(),
-        Number(dto.costo) || 0,
-        Number(dto.envio) || 0,
-        dto.precioVentaSugerido !== undefined && dto.precioVentaSugerido !== null ? Number(dto.precioVentaSugerido) : null,
-        (dto.imagen || '').trim() || null,
-        (dto.descripcion || '').trim() || null,
-      ],
-    );
     return this.mapearFila(resultado.rows[0]);
   }
 
+  async listar(): Promise<Producto[]> {
+    const resultado = await this.db.pool().query(`${SELECT_PRODUCTOS} ORDER BY p.creado_en DESC, p.id DESC`);
+    return resultado.rows.map((fila) => this.mapearFila(fila));
+  }
+
+  async listarAbonos(): Promise<Abono[]> {
+    const resultado = await this.db.pool().query(`
+      SELECT a.*, p.cliente, p.talla, p.referencia
+      FROM abonos a JOIN productos p ON p.id = a.producto_id
+      ORDER BY a.fecha DESC, a.id DESC
+    `);
+    return resultado.rows.map((fila) => this.mapearAbono(fila));
+  }
+
+  async crear(dto: CrearProductoDto): Promise<Producto> {
+    const talla = texto(dto.talla);
+    if (!talla) {
+      throw new BadRequestException('Falta la talla.');
+    }
+    const resultado = await this.db.pool().query(
+      `INSERT INTO productos (fecha_compra, referencia, talla, costo, envio, precio_venta_sugerido, imagen, descripcion, estado)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'disponible') RETURNING id`,
+      [
+        fechaOpcional(dto.fechaCompra, 'La fecha de compra'),
+        texto(dto.referencia),
+        talla,
+        numeroNoNegativo(dto.costo, 'El costo'),
+        numeroNoNegativo(dto.envio, 'El envío'),
+        dto.precioVentaSugerido !== undefined && dto.precioVentaSugerido !== null ? numeroNoNegativo(dto.precioVentaSugerido, 'El precio sugerido') : null,
+        texto(dto.imagen),
+        texto(dto.descripcion),
+      ],
+    );
+    return this.obtener(resultado.rows[0].id);
+  }
+
   async editar(id: number, dto: EditarProductoDto): Promise<Producto> {
-    const pool = this.requerirPool();
     const columnas: string[] = [];
     const valores: any[] = [];
     let i = 1;
@@ -224,92 +202,126 @@ export class ProductosService implements OnModuleInit {
       columnas.push(`${columna} = $${i++}`);
       valores.push(valor);
     };
-    if (dto.fechaCompra !== undefined) agregar('fecha_compra', dto.fechaCompra || null);
-    if (dto.referencia !== undefined) agregar('referencia', dto.referencia?.trim() || null);
+    if (dto.fechaCompra !== undefined) agregar('fecha_compra', fechaOpcional(dto.fechaCompra, 'La fecha de compra'));
+    if (dto.referencia !== undefined) agregar('referencia', texto(dto.referencia));
     if (dto.talla !== undefined) {
-      if (!dto.talla || !String(dto.talla).trim()) throw new BadRequestException('La talla no puede quedar vacía.');
-      agregar('talla', String(dto.talla).trim());
+      if (!texto(dto.talla)) throw new BadRequestException('La talla no puede quedar vacía.');
+      agregar('talla', texto(dto.talla));
     }
-    if (dto.costo !== undefined) agregar('costo', Number(dto.costo) || 0);
-    if (dto.envio !== undefined) agregar('envio', Number(dto.envio) || 0);
-    if (dto.precioVentaSugerido !== undefined) agregar('precio_venta_sugerido', dto.precioVentaSugerido === null ? null : Number(dto.precioVentaSugerido));
-    if (dto.imagen !== undefined) agregar('imagen', dto.imagen?.trim() || null);
-    if (dto.descripcion !== undefined) agregar('descripcion', dto.descripcion?.trim() || null);
+    if (dto.costo !== undefined) agregar('costo', numeroNoNegativo(dto.costo, 'El costo'));
+    if (dto.envio !== undefined) agregar('envio', numeroNoNegativo(dto.envio, 'El envío'));
+    if (dto.precioVentaSugerido !== undefined) agregar('precio_venta_sugerido', dto.precioVentaSugerido === null ? null : numeroNoNegativo(dto.precioVentaSugerido, 'El precio sugerido'));
+    if (dto.imagen !== undefined) agregar('imagen', texto(dto.imagen));
+    if (dto.descripcion !== undefined) agregar('descripcion', texto(dto.descripcion));
     if (columnas.length === 0) {
       throw new BadRequestException('No hay ningún cambio para guardar.');
     }
     valores.push(id);
-    const resultado = await pool.query(`UPDATE productos SET ${columnas.join(', ')} WHERE id = $${i} RETURNING *`, valores);
+    const resultado = await this.db.pool().query(`UPDATE productos SET ${columnas.join(', ')} WHERE id = $${i} RETURNING id`, valores);
     if (!resultado.rows[0]) {
       throw new NotFoundException('No existe ese producto.');
     }
-    return this.mapearFila(resultado.rows[0]);
+    return this.obtener(id);
   }
 
   // Marca una unidad del inventario como vendida — equivale a cuando en el
   // Excel se agregaba una fila nueva en la hoja del año con cliente/venta.
+  // Si pagó algo en el momento (de contado o una parte), queda como abono
+  // "inicial" en el historial.
   async vender(id: number, dto: VenderProductoDto): Promise<Producto> {
-    const pool = this.requerirPool();
-    if (!dto.cliente || !String(dto.cliente).trim()) {
+    const cliente = texto(dto.cliente);
+    if (!cliente) {
       throw new BadRequestException('Falta el nombre del cliente.');
     }
-    const valorVenta = Number(dto.valorVenta) || 0;
-    const abono = Number(dto.abono) || 0;
-    if (valorVenta < 0 || abono < 0) {
-      throw new BadRequestException('El precio de venta y el abono no pueden ser negativos.');
-    }
-    // "AND estado = 'disponible'" evita pisar una venta ya registrada (doble
-    // clic, otra pestaña abierta con datos viejos, etc.).
-    const resultado = await pool.query(
-      `UPDATE productos SET estado = 'vendido', cliente = $1, fecha_venta = $2, valor_venta = $3, abono = $4 WHERE id = $5 AND estado = 'disponible' RETURNING *`,
-      [String(dto.cliente).trim(), dto.fechaVenta || this.hoyColombia(), valorVenta, Math.min(abono, valorVenta), id],
-    );
-    if (!resultado.rows[0]) {
-      await this.exigirExistente(id);
-      throw new BadRequestException('Esa unidad ya está vendida.');
-    }
-    return this.mapearFila(resultado.rows[0]);
+    const valorVenta = numeroNoNegativo(dto.valorVenta, 'El precio de venta');
+    const abono = Math.min(numeroNoNegativo(dto.abono, 'El abono'), valorVenta);
+    const fechaVenta = fechaOpcional(dto.fechaVenta, 'La fecha de venta') || hoyColombia();
+    return this.db.transaccion(async (client) => {
+      // "AND estado = 'disponible'" evita pisar una venta ya registrada (doble
+      // clic, otra pestaña abierta con datos viejos, etc.).
+      const resultado = await client.query(
+        `UPDATE productos SET estado = 'vendido', cliente = $1, fecha_venta = $2, valor_venta = $3 WHERE id = $4 AND estado = 'disponible' RETURNING id`,
+        [cliente, fechaVenta, valorVenta, id],
+      );
+      if (!resultado.rows[0]) {
+        await this.obtener(id, client);
+        throw new BadRequestException('Esa unidad ya está vendida.');
+      }
+      if (abono > 0) {
+        await client.query(`INSERT INTO abonos (producto_id, monto, fecha, tipo) VALUES ($1, $2, $3, 'inicial')`, [id, abono, fechaVenta]);
+      }
+      return this.obtener(id, client);
+    });
   }
 
-  // Suma un abono nuevo al que ya tenía (para ventas a crédito/fiado, igual
-  // que la columna "Abono"/"Resta" del Excel).
-  async abonar(id: number, monto: number): Promise<Producto> {
-    const pool = this.requerirPool();
-    const montoNumero = Number(monto) || 0;
-    if (montoNumero <= 0) {
+  // Registra un pago de una venta a crédito/fiado (igual que la columna
+  // "Abono"/"Resta" del Excel, pero guardando cada pago con su fecha). Si el
+  // monto supera lo que falta, se registra solo lo que falta.
+  async crearAbono(dto: CrearAbonoDto): Promise<Abono> {
+    const productoId = Number(dto.productoId);
+    if (!Number.isInteger(productoId)) {
+      throw new BadRequestException('Falta indicar a qué venta corresponde el abono.');
+    }
+    const monto = numeroNoNegativo(dto.monto, 'El abono');
+    if (monto <= 0) {
       throw new BadRequestException('El abono tiene que ser mayor a cero.');
     }
-    // Se suma en el mismo UPDATE (no leer y después escribir) para que dos
-    // abonos casi simultáneos no se pisen; LEAST lo topa en el valor de venta.
-    const resultado = await pool.query(
-      `UPDATE productos SET abono = LEAST(abono + $1, valor_venta) WHERE id = $2 AND estado = 'vendido' RETURNING *`,
-      [montoNumero, id],
-    );
-    if (!resultado.rows[0]) {
-      await this.exigirExistente(id);
-      throw new BadRequestException('Solo se puede abonar a una unidad vendida.');
+    const fecha = fechaOpcional(dto.fecha, 'La fecha del abono') || hoyColombia();
+    return this.db.transaccion(async (client) => {
+      // FOR UPDATE bloquea la venta mientras tanto, para que dos abonos casi
+      // simultáneos no se pasen del valor de la venta.
+      const venta = await client.query(`SELECT estado, valor_venta FROM productos WHERE id = $1 FOR UPDATE`, [productoId]);
+      if (!venta.rows[0]) {
+        throw new NotFoundException('No existe ese producto.');
+      }
+      if (venta.rows[0].estado !== 'vendido') {
+        throw new BadRequestException('Solo se puede abonar a una unidad vendida.');
+      }
+      const pagado = await client.query(`SELECT COALESCE(SUM(monto), 0) AS total FROM abonos WHERE producto_id = $1`, [productoId]);
+      const resta = (Number(venta.rows[0].valor_venta) || 0) - (Number(pagado.rows[0].total) || 0);
+      if (resta <= 0) {
+        throw new BadRequestException('Esa venta ya está pagada completa.');
+      }
+      const insertado = await client.query(
+        `INSERT INTO abonos (producto_id, monto, fecha, nota, tipo) VALUES ($1, $2, $3, $4, 'abono') RETURNING id`,
+        [productoId, Math.min(monto, resta), fecha, texto(dto.nota)],
+      );
+      const fila = await client.query(
+        `SELECT a.*, p.cliente, p.talla, p.referencia FROM abonos a JOIN productos p ON p.id = a.producto_id WHERE a.id = $1`,
+        [insertado.rows[0].id],
+      );
+      return this.mapearAbono(fila.rows[0]);
+    });
+  }
+
+  async eliminarAbono(id: number): Promise<{ ok: true }> {
+    const resultado = await this.db.pool().query(`DELETE FROM abonos WHERE id = $1`, [id]);
+    if (resultado.rowCount === 0) {
+      throw new NotFoundException('No existe ese abono.');
     }
-    return this.mapearFila(resultado.rows[0]);
+    return { ok: true };
   }
 
   // Vuelve una unidad vendida a "disponible" (por si se registró mal o el
-  // cliente devolvió el par) — limpia los datos de la venta, el costo/envío
-  // del inventario quedan intactos.
+  // cliente devolvió el par) — borra los datos de la venta y sus abonos; el
+  // costo/envío del inventario quedan intactos.
   async revertirVenta(id: number): Promise<Producto> {
-    const pool = this.requerirPool();
-    const resultado = await pool.query(
-      `UPDATE productos SET estado = 'disponible', cliente = NULL, fecha_venta = NULL, valor_venta = NULL, abono = 0 WHERE id = $1 RETURNING *`,
-      [id],
-    );
-    if (!resultado.rows[0]) {
-      throw new NotFoundException('No existe ese producto.');
-    }
-    return this.mapearFila(resultado.rows[0]);
+    return this.db.transaccion(async (client) => {
+      const resultado = await client.query(
+        `UPDATE productos SET estado = 'disponible', cliente = NULL, fecha_venta = NULL, valor_venta = NULL WHERE id = $1 RETURNING id`,
+        [id],
+      );
+      if (!resultado.rows[0]) {
+        throw new NotFoundException('No existe ese producto.');
+      }
+      await client.query(`DELETE FROM abonos WHERE producto_id = $1`, [id]);
+      return this.obtener(id, client);
+    });
   }
 
+  // Sus abonos se borran solos (ON DELETE CASCADE en esquema.ts).
   async eliminar(id: number): Promise<{ ok: true }> {
-    const pool = this.requerirPool();
-    const resultado = await pool.query(`DELETE FROM productos WHERE id = $1`, [id]);
+    const resultado = await this.db.pool().query(`DELETE FROM productos WHERE id = $1`, [id]);
     if (resultado.rowCount === 0) {
       throw new NotFoundException('No existe ese producto.');
     }

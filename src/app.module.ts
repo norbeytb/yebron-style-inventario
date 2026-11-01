@@ -4,11 +4,16 @@ import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './auth.guard';
+import { DbService } from './db.service';
+import { GastosService } from './gastos.service';
+import { AbonosController } from './abonos.controller';
+import { DatosController } from './datos.controller';
+import { GastosController } from './gastos.controller';
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
 
 @Module({
-  controllers: [AuthController, ProductosController],
-  providers: [AuthService, JwtAuthGuard, ProductosService],
+  controllers: [AuthController, ProductosController, AbonosController, GastosController, DatosController],
+  providers: [AuthService, JwtAuthGuard, DbService, ProductosService, GastosService],
 })
 export class AppModule {}
