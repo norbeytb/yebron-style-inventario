@@ -129,9 +129,17 @@ let productos = [];
 let invSort = { field: 'fechaCompra', dir: 'desc' };
 let ventasSearch = '';
 
-function uid() { return Math.random().toString(36).slice(2); }
 function money(n) { n = Number(n) || 0; return '$' + n.toLocaleString('es-CO', { maximumFractionDigits: 0 }); }
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+// Fecha de HOY en la hora local del navegador — toISOString() la da en UTC
+// y en Colombia (UTC-5), después de las 7 pm, ya devolvería la de mañana.
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// Escapa texto que escribió el usuario antes de meterlo en innerHTML.
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 function fmtDate(iso) { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
 function monthKey(iso) { return iso ? iso.slice(0, 7) : ''; }
 function monthLabel(key) {
@@ -325,7 +333,7 @@ function renderInventario() {
           <th>Venta sug.</th><th></th>
         </tr></thead>
         <tbody>${disponibles.map((p) => `<tr>
-          <td>${fmtDate(p.fechaCompra)}</td><td>${p.referencia || '—'}</td><td>${p.talla}</td>
+          <td>${fmtDate(p.fechaCompra)}</td><td>${esc(p.referencia) || '—'}</td><td>${esc(p.talla)}</td>
           <td>${money(p.costo)}</td><td>${money(p.envio)}</td><td>${p.precioVentaSugerido ? money(p.precioVentaSugerido) : '—'}</td>
           <td><button class="btn small" onclick="openVenderModal(${p.id})">Vender</button>
           <button class="btn small danger" onclick="deleteProducto(${p.id})">✕</button></td>
@@ -376,11 +384,11 @@ function renderVentas() {
   el.innerHTML = `
     <div class="panel">
       <h2>Ventas registradas (${vendidos.length})</h2>
-      <div style="margin-bottom:14px"><input type="text" id="buscarCliente" placeholder="Buscar por cliente..." value="${ventasSearch.replace(/"/g,'&quot;')}"></div>
+      <div style="margin-bottom:14px"><input type="text" id="buscarCliente" placeholder="Buscar por cliente..." value="${esc(ventasSearch)}"></div>
       ${vendidos.length ? `<div class="table-scroll"><table>
         <thead><tr><th>Fecha</th><th>Talla</th><th>Cliente</th><th>Venta</th><th>Abono</th><th>Resta</th><th>Ganancia</th><th></th></tr></thead>
         <tbody>${vendidos.map((p) => { const c = computed(p); return `<tr>
-          <td>${fmtDate(p.fechaVenta)}</td><td>${p.talla}</td><td>${p.cliente || '—'}</td>
+          <td>${fmtDate(p.fechaVenta)}</td><td>${esc(p.talla)}</td><td>${esc(p.cliente) || '—'}</td>
           <td>${money(p.valorVenta)}</td><td>${money(p.abono)}</td>
           <td>${c.resta > 0 ? `<span class="badge warn">${money(c.resta)}</span>` : `<span class="badge ok">Pagado</span>`}</td>
           <td style="color:var(--teal)">${money(c.ganancia)}</td>
@@ -407,7 +415,7 @@ function openVenderModal(id) {
   if (!p) return;
   document.getElementById('modalRoot').innerHTML = `
     <div class="modal-overlay"><div class="modal">
-      <h3>Registrar venta — ${p.talla}</h3>
+      <h3>Registrar venta — ${esc(p.talla)}</h3>
       <form id="formVender">
         <div class="modal-row"><label>Cliente</label><input type="text" name="cliente" required placeholder="Nombre del cliente"></div>
         <div class="modal-row"><label>Fecha de venta</label><input type="date" name="fechaVenta" value="${todayISO()}" required></div>
@@ -438,7 +446,7 @@ function openAbonoModal(id) {
   document.getElementById('modalRoot').innerHTML = `
     <div class="modal-overlay"><div class="modal">
       <h3>Registrar abono</h3>
-      <p class="muted">Cliente: ${p.cliente} · Saldo pendiente: ${money(resta)}</p>
+      <p class="muted">Cliente: ${esc(p.cliente)} · Saldo pendiente: ${money(resta)}</p>
       <form id="formAbono">
         <div class="modal-row"><label>Monto del abono</label><input type="number" name="monto" min="1" max="${resta}" required></div>
         <div class="modal-actions"><button type="button" class="btn secondary" onclick="closeModal()">Cancelar</button><button type="submit" class="btn">Registrar</button></div>

@@ -3,7 +3,7 @@
 // Todos los endpoints exigen sesión iniciada (JwtAuthGuard) — ver
 // auth.guard.ts.
 
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from './auth.guard';
 import { CrearProductoDto, EditarProductoDto, Producto, ProductosService, VenderProductoDto } from './productos.service';
 
@@ -23,27 +23,27 @@ export class ProductosController {
   }
 
   @Patch(':id')
-  editar(@Param('id') id: string, @Body() dto: EditarProductoDto): Promise<Producto> {
-    return this.productosService.editar(Number(id), dto);
+  editar(@Param('id', ParseIntPipe) id: number, @Body() dto: EditarProductoDto): Promise<Producto> {
+    return this.productosService.editar(id, dto);
   }
 
   @Patch(':id/vender')
-  vender(@Param('id') id: string, @Body() dto: VenderProductoDto): Promise<Producto> {
-    return this.productosService.vender(Number(id), dto);
+  vender(@Param('id', ParseIntPipe) id: number, @Body() dto: VenderProductoDto): Promise<Producto> {
+    return this.productosService.vender(id, dto);
   }
 
   @Patch(':id/abonar')
-  abonar(@Param('id') id: string, @Body() dto: { monto: number }): Promise<Producto> {
-    return this.productosService.abonar(Number(id), dto?.monto);
+  abonar(@Param('id', ParseIntPipe) id: number, @Body() dto: { monto: number }): Promise<Producto> {
+    return this.productosService.abonar(id, dto?.monto);
   }
 
   @Patch(':id/revertir-venta')
-  revertirVenta(@Param('id') id: string): Promise<Producto> {
-    return this.productosService.revertirVenta(Number(id));
+  revertirVenta(@Param('id', ParseIntPipe) id: number): Promise<Producto> {
+    return this.productosService.revertirVenta(id);
   }
 
   @Delete(':id')
-  eliminar(@Param('id') id: string): Promise<{ ok: true }> {
-    return this.productosService.eliminar(Number(id));
+  eliminar(@Param('id', ParseIntPipe) id: number): Promise<{ ok: true }> {
+    return this.productosService.eliminar(id);
   }
 }
