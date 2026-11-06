@@ -17,8 +17,15 @@ async function main() {
     process.exit(1);
   }
   const { pedidos } = JSON.parse(readFileSync(archivo, 'utf8'));
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // SSL=1 fuerza conexión cifrada (Railway la acepta con o sin cifrar).
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 20000,
+    ssl: process.env.SSL === '1' ? { rejectUnauthorized: false } : undefined,
+  });
+  console.log('Conectando a la base de datos...');
   const client = await pool.connect();
+  console.log(`Conectado. Procesando ${pedidos.length} pedidos...`);
   let nuevos = 0, existentes = 0;
   try {
     await client.query('BEGIN');
@@ -41,6 +48,7 @@ async function main() {
       );
       if (!r.rowCount) { existentes++; continue; }
       nuevos++;
+      if (nuevos % 100 === 0) console.log(`  ${nuevos} pedidos...`);
       if (p.abono > 0) {
         await client.query(`INSERT INTO pedido_pagos (pedido_id, monto, fecha, nota, id_origen) VALUES ($1,$2,$3,'Importado del Excel',$4)`, [r.rows[0].id, p.abono, p.fecha, p.idOrigen + '-abono']);
       }
