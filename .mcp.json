@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "context-mode": {
-      "command": "npx",
-      "args": ["-y", "context-mode@2.1.5", "server", "--agent", "claude-code"]
-    }
-  }
-}
