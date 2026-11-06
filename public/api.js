@@ -116,6 +116,16 @@ window.Api = (function () {
     }),
     eliminarAbono: (id) => pedir('/abonos/' + encodeURIComponent(id), { method: 'DELETE' }),
 
+    cargarPedidos: async () => {
+      const [pedidos, bodegas, pagos] = await Promise.all([pedir('/pedidos'), pedir('/bodegas'), pedir('/pedido-pagos')]);
+      return { pedidos, bodegas, pagos };
+    },
+    crearPedido: (p) => pedir('/pedidos', { method: 'POST', body: JSON.stringify(p) }),
+    estadoPedido: (id, estado) => pedir('/pedidos/' + id + '/estado', { method: 'PATCH', body: JSON.stringify({ estado }) }),
+    eliminarPedido: (id) => pedir('/pedidos/' + id, { method: 'DELETE' }),
+    crearPago: (id, monto, fecha, nota) => pedir('/pedidos/' + id + '/pagos', { method: 'POST', body: JSON.stringify({ monto, fecha, nota }) }),
+    eliminarPago: (id) => pedir('/pedido-pagos/' + id, { method: 'DELETE' }),
+
     crearGasto: (g) => pedir('/gastos', { method: 'POST', body: JSON.stringify(g) }),
     eliminarGasto: (id) => pedir('/gastos/' + encodeURIComponent(id), { method: 'DELETE' }),
   };

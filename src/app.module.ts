@@ -11,9 +11,11 @@ import { DatosController } from './datos.controller';
 import { GastosController } from './gastos.controller';
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
+import { PedidosController } from './pedidos.controller';
+import { PedidosService } from './pedidos.service';
 
 @Module({
-  controllers: [AuthController, ProductosController, AbonosController, GastosController, DatosController],
-  providers: [AuthService, JwtAuthGuard, DbService, ProductosService, GastosService],
+  controllers: [AuthController, ProductosController, AbonosController, GastosController, DatosController, PedidosController],
+  providers: [AuthService, JwtAuthGuard, DbService, ProductosService, GastosService, PedidosService],
 })
 export class AppModule {}
