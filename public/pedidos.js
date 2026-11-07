@@ -6,6 +6,7 @@ let bodegas = [];
 let pedPagos = [];
 let pedFiltro = { bodega: '', texto: '', desde: '', hasta: '' };
 const NUEVA = '__nueva__';
+const CATEGORIA_GASTO_PEDIDOS = 'Bajo pedido';
 
 async function cargarPedidosDatos() {
   const d = await Api.cargarPedidos();
@@ -32,6 +33,10 @@ function renderPedidos() {
     (!pedFiltro.bodega || String(p.bodegaId) === pedFiltro.bodega) &&
     (!q || (p.cliente + ' ' + p.referencia).toLowerCase().includes(q)));
   const activos = lista.filter(p => p.estado !== 'cancelado');
+  const gastosRango = gastos.filter(g => g.categoria === CATEGORIA_GASTO_PEDIDOS &&
+    (!pedFiltro.desde || g.fecha >= pedFiltro.desde) && (!pedFiltro.hasta || g.fecha <= pedFiltro.hasta))
+    .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  const totalGastos = gastosRango.reduce((t, g) => t + (Number(g.monto) || 0), 0);
   const porCobrar = activos.reduce((s, p) => s + pedResta(p), 0);
   const ganancia = activos.reduce((s, p) => s + pedGanancia(p), 0);
   const suma = (f) => activos.reduce((t, p) => t + f(p), 0);
@@ -59,6 +64,8 @@ function renderPedidos() {
       <div class="stat"><div class="label">Costo</div><div class="value">${money(suma(p => p.costo))}</div></div>
       <div class="stat"><div class="label">Envíos</div><div class="value">${money(suma(p => p.envio))}</div></div>
       <div class="stat"><div class="label">Ganancia</div><div class="value">${money(ganancia)}</div></div>
+      <div class="stat neg"><div class="label">Gastos</div><div class="value">${money(totalGastos)}</div></div>
+      <div class="stat"><div class="label">Ganancia − gastos</div><div class="value">${money(ganancia - totalGastos)}</div></div>
       <div class="stat neg"><div class="label">Por cobrar</div><div class="value">${money(porCobrar)}</div></div>
     </div>
     <div class="panel">
@@ -77,6 +84,20 @@ function renderPedidos() {
         <div><label>Abono inicial</label><input type="number" name="abono" min="0"></div>
         <div><button class="btn" type="submit">Agregar pedido</button></div>
       </form>
+    </div>
+    <div class="panel">
+      <h2>Gastos (${gastosRango.length}) · ${money(totalGastos)}</h2>
+      <form id="formGastoPedido" class="grid-form">
+        <div><label>Fecha</label><input type="date" name="fecha" value="${todayISO()}" required></div>
+        <div><label>Valor del gasto</label><input type="number" name="monto" min="1" required></div>
+        <div><label>Detalle</label><input type="text" name="descripcion" placeholder="Ej: Publicidad Meta, empaques..." required></div>
+        <div><button class="btn" type="submit">Agregar gasto</button></div>
+      </form>
+      ${gastosRango.length ? `<div class="table-scroll"><table>
+        <thead><tr><th>Fecha</th><th>Detalle</th><th>Valor</th><th></th></tr></thead>
+        <tbody>${gastosRango.map(g => `<tr><td>${fmtDate(g.fecha)}</td><td>${esc(g.descripcion) || '—'}</td><td>${money(g.monto)}</td>
+          <td><button class="btn small danger" onclick="deleteGasto('${g.id}')">✕</button></td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="empty">No hay gastos en este rango.</div>'}
     </div>
     <div class="panel">
       <h2>Pedidos (${lista.length})</h2>
@@ -106,6 +127,10 @@ function renderPedidos() {
       unidades: Number(f.unidades.value) || 1, venta: Number(f.venta.value) || 0, costo: Number(f.costo.value) || 0,
       envio: Number(f.envio.value) || 0, abono: Number(f.abono.value) || 0,
     }), 'Pedido agregado');
+  });
+  document.getElementById('formGastoPedido').addEventListener('submit', async (e) => {
+    e.preventDefault(); const g = e.target;
+    await guardar(() => Api.crearGasto({ fecha: g.fecha.value, categoria: CATEGORIA_GASTO_PEDIDOS, descripcion: g.descripcion.value.trim(), monto: Number(g.monto.value) || 0 }), 'Gasto registrado');
   });
   const re = () => renderPedidos();
   document.getElementById('pfDesde').onchange = (e) => { pedFiltro.desde = e.target.value; re(); };
