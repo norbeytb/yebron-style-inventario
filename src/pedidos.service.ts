@@ -98,6 +98,40 @@ export class PedidosService {
     return this.mapear(r.rows[0]);
   }
 
+  // Edita cualquier campo de un pedido. Solo cambia los campos que vienen.
+  async editar(id: number, dto: Partial<CrearPedidoDto>): Promise<Pedido> {
+    const sets: string[] = [];
+    const vals: any[] = [id];
+    const poner = (columna: string, valor: any) => { vals.push(valor); sets.push(`${columna} = $${vals.length}`); };
+    if (dto.fecha !== undefined) {
+      const f = fechaOpcional(dto.fecha, 'La fecha');
+      if (!f) throw new BadRequestException('La fecha no puede quedar vacía.');
+      poner('fecha', f);
+    }
+    if (dto.cliente !== undefined) {
+      const c = texto(dto.cliente);
+      if (!c) throw new BadRequestException('El cliente no puede quedar vacío.');
+      poner('cliente', c);
+    }
+    if (dto.bodegaNueva !== undefined && texto(dto.bodegaNueva)) poner('bodega_id', await this.obtenerOCrearBodega(dto.bodegaNueva));
+    else if (dto.bodegaId !== undefined) poner('bodega_id', dto.bodegaId ? Number(dto.bodegaId) : null);
+    if (dto.referencia !== undefined) poner('referencia', texto(dto.referencia));
+    if (dto.talla !== undefined) poner('talla', texto(dto.talla));
+    if (dto.unidades !== undefined) {
+      const u = Math.floor(numeroNoNegativo(dto.unidades, 'Las unidades'));
+      if (u < 1) throw new BadRequestException('Las unidades tienen que ser al menos 1.');
+      poner('unidades', u);
+    }
+    if (dto.venta !== undefined) poner('venta', numeroNoNegativo(dto.venta, 'La venta'));
+    if (dto.costo !== undefined) poner('costo', numeroNoNegativo(dto.costo, 'El costo'));
+    if (dto.envio !== undefined) poner('envio', numeroNoNegativo(dto.envio, 'El envío'));
+    if (dto.nota !== undefined) poner('nota', texto(dto.nota));
+    if (!sets.length) return this.obtener(id);
+    const r = await this.db.pool().query(`UPDATE pedidos SET ${sets.join(', ')} WHERE id = $1`, vals);
+    if (!r.rowCount) throw new NotFoundException('No existe ese pedido.');
+    return this.obtener(id);
+  }
+
   async cambiarEstado(id: number, estado: string): Promise<Pedido> {
     if (!ESTADOS_PEDIDO.includes(estado)) throw new BadRequestException('Estado no válido.');
     const r = await this.db.pool().query(`UPDATE pedidos SET estado = $2 WHERE id = $1`, [id, estado]);

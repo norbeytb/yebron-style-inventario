@@ -121,6 +121,7 @@ window.Api = (function () {
       return { pedidos, bodegas, pagos };
     },
     crearPedido: (p) => pedir('/pedidos', { method: 'POST', body: JSON.stringify(p) }),
+    editarPedido: (id, datos) => pedir('/pedidos/' + id, { method: 'PATCH', body: JSON.stringify(datos) }),
     estadoPedido: (id, estado) => pedir('/pedidos/' + id + '/estado', { method: 'PATCH', body: JSON.stringify({ estado }) }),
     eliminarPedido: (id) => pedir('/pedidos/' + id, { method: 'DELETE' }),
     crearPago: (id, monto, fecha, nota) => pedir('/pedidos/' + id + '/pagos', { method: 'POST', body: JSON.stringify({ monto, fecha, nota }) }),
