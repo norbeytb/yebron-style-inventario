@@ -111,7 +111,7 @@ function renderPedidos() {
           <td>${fmtDate(p.fecha)}</td><td>${esc(p.cliente)}</td><td>${esc(p.referencia) || '—'}</td>
           <td>${esc(p.talla) || '—'}</td><td>${esc(p.bodega) || '—'}</td><td>${p.unidades}</td><td>${money(p.venta)}</td><td>${money(p.costo)}</td><td>${money(p.envio)}</td><td>${money(pedGanancia(p))}</td>
           <td>${pedResta(p) > 0 ? `<span class="badge pendiente">${money(pedResta(p))}</span>` : `<span class="badge disponible">Pagado</span>`}</td>
-          <td>${pedResta(p) ? `<button class="btn small" onclick="abrirPagoPedido(${p.id})">Abonar</button> ` : ''}<button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
+          <td>${pedResta(p) ? `<button class="btn small" onclick="abrirPagoPedido(${p.id})">Abonar</button> ` : ''}<button class="btn small secondary" onclick="abrirEditarPedido(${p.id})">Editar</button> <button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="empty">No hay pedidos con ese filtro.</div>'}
     </div>`;
 
@@ -163,6 +163,40 @@ function rangoPedidos(tipo) {
   else if (tipo === 'anio') { pedFiltro.desde = `${a}-01-01`; pedFiltro.hasta = `${a}-12-31`; }
   else { pedFiltro.desde = ''; pedFiltro.hasta = ''; }
   renderPedidos();
+}
+
+function abrirEditarPedido(id) {
+  const p = pedidos.find(x => x.id === id); if (!p) return;
+  const num = (v) => (Number(v) ? v : '');
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-overlay"><div class="modal">
+      <h3>Editar pedido</h3>
+      <form id="formEditarPedido">
+        <div class="modal-row"><label>Fecha</label><input type="date" name="fecha" value="${p.fecha}" required></div>
+        <div class="modal-row"><label>Cliente</label><input type="text" name="cliente" value="${esc(p.cliente)}" required></div>
+        <div class="modal-row"><label>Bodega</label><select name="bodega">${opcionesBodega(p.bodegaId)}</select>
+          <input type="text" name="bodegaNueva" placeholder="Nombre de la nueva bodega" style="display:none;margin-top:6px"></div>
+        <div class="modal-row"><label>Modelo / referencia</label><input type="text" name="referencia" value="${esc(p.referencia)}"></div>
+        <div class="modal-row"><label>Talla</label><input type="text" name="talla" value="${esc(p.talla)}"></div>
+        <div class="modal-row"><label>Unidades</label><input type="number" name="unidades" min="1" value="${p.unidades}"></div>
+        <div class="modal-row"><label>Precio de venta</label><input type="number" name="venta" min="0" value="${num(p.venta)}"></div>
+        <div class="modal-row"><label>Costo (bodega)</label><input type="number" name="costo" min="0" value="${num(p.costo)}"></div>
+        <div class="modal-row"><label>Envío (puedes dejarlo vacío hasta que llegue)</label><input type="number" name="envio" min="0" value="${num(p.envio)}"></div>
+        <div class="modal-actions"><button type="button" class="btn secondary" onclick="closeModal()">Cancelar</button><button class="btn" type="submit">Guardar cambios</button></div>
+      </form></div></div>`;
+  const f = document.getElementById('formEditarPedido');
+  f.bodega.addEventListener('change', () => { f.bodegaNueva.style.display = f.bodega.value === NUEVA ? 'block' : 'none'; if (f.bodega.value === NUEVA) f.bodegaNueva.focus(); });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nueva = f.bodega.value === NUEVA;
+    if (nueva && !f.bodegaNueva.value.trim()) return showToast('Escribí el nombre de la nueva bodega.');
+    const datos = {
+      fecha: f.fecha.value, cliente: f.cliente.value.trim(), referencia: f.referencia.value.trim(), talla: f.talla.value.trim(),
+      unidades: Number(f.unidades.value) || 1, venta: Number(f.venta.value) || 0, costo: Number(f.costo.value) || 0, envio: Number(f.envio.value) || 0,
+    };
+    if (nueva) datos.bodegaNueva = f.bodegaNueva.value.trim(); else datos.bodegaId = Number(f.bodega.value) || null;
+    if (await guardar(() => Api.editarPedido(id, datos), 'Pedido actualizado')) closeModal();
+  });
 }
 
 function abrirPagoPedido(id) {

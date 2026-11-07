@@ -16,6 +16,9 @@ export class PedidosController {
 
   @Get('pedidos') listar(): Promise<Pedido[]> { return this.s.listar(); }
   @Post('pedidos') crear(@Body() dto: CrearPedidoDto): Promise<Pedido> { return this.s.crear(dto || ({} as CrearPedidoDto)); }
+  @Patch('pedidos/:id') editar(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CrearPedidoDto>): Promise<Pedido> {
+    return this.s.editar(id, dto || {});
+  }
   @Patch('pedidos/:id/estado') estado(@Param('id', ParseIntPipe) id: number, @Body() b: { estado: string }): Promise<Pedido> {
     return this.s.cambiarEstado(id, b?.estado);
   }
