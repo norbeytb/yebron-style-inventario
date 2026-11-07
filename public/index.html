@@ -217,6 +217,8 @@
       <button data-tab="ventas">Ventas</button>
       <button data-tab="abonos">Abonos</button>
       <button data-tab="clientes">Clientes</button>
+      <button data-tab="pedidos">Bajo pedido</button>
+      <button data-tab="bodegas">Bodegas</button>
       <button data-tab="gastos">Gastos</button>
     </nav>
 
@@ -226,6 +228,8 @@
       <div id="tab-ventas" style="display:none"></div>
       <div id="tab-abonos" style="display:none"></div>
       <div id="tab-clientes" style="display:none"></div>
+      <div id="tab-pedidos" style="display:none"></div>
+      <div id="tab-bodegas" style="display:none"></div>
       <div id="tab-gastos" style="display:none"></div>
     </main>
   </div>
@@ -236,6 +240,7 @@
 
 <!-- api.js habla con el backend (login + datos en PostgreSQL) -->
 <script src="api.js"></script>
+<script src="pedidos.js"></script>
 <script>
 let units = [];
 let gastos = [];
@@ -317,6 +322,7 @@ async function cargarDatos() {
     units = d.units;
     gastos = d.gastos;
     abonos = d.abonos;
+    await cargarPedidosDatos();
     renderAll();
   } catch (err) {
     showToast(err.message);
@@ -1070,7 +1076,7 @@ function showConfirm(msg, onConfirm) {
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 
 // ---------- TABS ----------
-const TABS = ['resumen','inventario','ventas','abonos','clientes','gastos'];
+const TABS = ['resumen','inventario','ventas','abonos','clientes','pedidos','bodegas','gastos'];
 
 function renderAll() {
   renderResumen();
@@ -1079,6 +1085,8 @@ function renderAll() {
   renderAbonos();
   renderClientes();
   renderGastos();
+  renderPedidos();
+  renderBodegas();
 }
 
 function switchTab(tab) {

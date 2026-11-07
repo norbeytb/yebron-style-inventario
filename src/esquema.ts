@@ -80,6 +80,56 @@ export async function aplicarEsquema(client: PoolClient): Promise<void> {
     )
   `);
 
+  // ---- Bajo pedido: pares que se le compran a otras bodegas por encargo ----
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS bodegas (
+      id SERIAL PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      frecuente BOOLEAN NOT NULL DEFAULT false,
+      activa BOOLEAN NOT NULL DEFAULT true,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS bodegas_nombre_idx ON bodegas (lower(nombre))`);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS pedidos (
+      id SERIAL PRIMARY KEY,
+      fecha DATE NOT NULL,
+      cliente TEXT NOT NULL,
+      bodega_id INTEGER REFERENCES bodegas(id),
+      referencia TEXT,
+      talla TEXT,
+      unidades INTEGER NOT NULL DEFAULT 1 CHECK (unidades > 0),
+      venta NUMERIC NOT NULL DEFAULT 0,
+      costo NUMERIC NOT NULL DEFAULT 0,
+      envio NUMERIC NOT NULL DEFAULT 0,
+      estado TEXT NOT NULL DEFAULT 'pedido',
+      nota TEXT,
+      id_origen TEXT UNIQUE,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await client.query(`CREATE INDEX IF NOT EXISTS pedidos_cliente_idx ON pedidos (lower(cliente))`);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS pedido_pagos (
+      id SERIAL PRIMARY KEY,
+      pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+      monto NUMERIC NOT NULL CHECK (monto > 0),
+      fecha DATE NOT NULL,
+      nota TEXT,
+      id_origen TEXT UNIQUE,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await client.query(`CREATE INDEX IF NOT EXISTS pedido_pagos_pedido_idx ON pedido_pagos (pedido_id)`);
+  // Bodegas con las que más se ha vendido: salen primero en el desplegable.
+  await client.query(`
+    INSERT INTO bodegas (nombre, frecuente) VALUES
+      ('Tania', true), ('MN', true), ('ML Sport', true), ('Og Sneaker', true), ('Silvia', true),
+      ('Betel', true), ('Mi bodega', true)
+    ON CONFLICT (lower(nombre)) DO UPDATE SET frecuente = true
+  `);
+
   // Migración de la primera versión: ahí productos tenía una columna
   // "abono" con el total abonado y no había historial. Ese total pasa a la
   // tabla abonos como un abono "saldo-anterior" (fechado el día de la venta)
