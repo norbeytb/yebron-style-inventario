@@ -212,23 +212,23 @@
 
   <div class="layout">
     <nav class="tabs">
-      <button data-tab="resumen" class="active">Resumen</button>
+      <button data-tab="pedidos" class="active">Bajo pedido</button>
+      <button data-tab="resumen">Resumen</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="ventas">Ventas</button>
       <button data-tab="abonos">Abonos</button>
       <button data-tab="clientes">Clientes</button>
-      <button data-tab="pedidos">Bajo pedido</button>
       <button data-tab="bodegas">Bodegas</button>
       <button data-tab="gastos">Gastos</button>
     </nav>
 
     <main class="contenido">
-      <div id="tab-resumen"></div>
+      <div id="tab-pedidos"></div>
+      <div id="tab-resumen" style="display:none"></div>
       <div id="tab-inventario" style="display:none"></div>
       <div id="tab-ventas" style="display:none"></div>
       <div id="tab-abonos" style="display:none"></div>
       <div id="tab-clientes" style="display:none"></div>
-      <div id="tab-pedidos" style="display:none"></div>
       <div id="tab-bodegas" style="display:none"></div>
       <div id="tab-gastos" style="display:none"></div>
     </main>
@@ -245,7 +245,7 @@
 let units = [];
 let gastos = [];
 let abonos = [];
-let currentTab = 'resumen';
+let currentTab = 'pedidos';
 let invSort = { field: 'fechaCompra', dir: 'desc' };
 
 function sortUnits(list, sort) {
@@ -1076,7 +1076,7 @@ function showConfirm(msg, onConfirm) {
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 
 // ---------- TABS ----------
-const TABS = ['resumen','inventario','ventas','abonos','clientes','pedidos','bodegas','gastos'];
+const TABS = ['pedidos','resumen','inventario','ventas','abonos','clientes','bodegas','gastos'];
 
 function renderAll() {
   renderResumen();

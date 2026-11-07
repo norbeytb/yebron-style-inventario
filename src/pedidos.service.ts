@@ -69,7 +69,7 @@ export class PedidosService {
   async crear(dto: CrearPedidoDto): Promise<Pedido> {
     const cliente = texto(dto.cliente);
     if (!cliente) throw new BadRequestException('Falta el nombre del cliente.');
-    const estado = dto.estado || 'pedido';
+    const estado = dto.estado || 'entregado';
     if (!ESTADOS_PEDIDO.includes(estado)) throw new BadRequestException('Estado no válido.');
     const unidades = Math.floor(numeroNoNegativo(dto.unidades ?? 1, 'Las unidades'));
     if (unidades < 1) throw new BadRequestException('Las unidades tienen que ser al menos 1.');
