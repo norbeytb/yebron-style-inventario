@@ -111,7 +111,17 @@ function renderPedidos() {
   document.getElementById('pfDesde').onchange = (e) => { pedFiltro.desde = e.target.value; re(); };
   document.getElementById('pfHasta').onchange = (e) => { pedFiltro.hasta = e.target.value; re(); };
   document.getElementById('pfBodega').onchange = (e) => { pedFiltro.bodega = e.target.value; re(); };
-  document.getElementById('pfTexto').onchange = (e) => { pedFiltro.texto = e.target.value; re(); };
+  // Filtra mientras se escribe (con una pausa corta) y devuelve el cursor al
+  // cuadro, porque al redibujar la pestaña el cuadro se vuelve a crear.
+  document.getElementById('pfTexto').oninput = (e) => {
+    pedFiltro.texto = e.target.value;
+    clearTimeout(pedFiltro._t);
+    pedFiltro._t = setTimeout(() => {
+      re();
+      const c = document.getElementById('pfTexto');
+      if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
+    }, 150);
+  };
 }
 
 function borrarPedido(id) { showConfirm('¿Eliminar este pedido y sus abonos?', () => guardar(() => Api.eliminarPedido(id), 'Pedido eliminado')); }
