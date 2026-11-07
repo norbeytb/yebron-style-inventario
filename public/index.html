@@ -213,13 +213,13 @@
   <div class="layout">
     <nav class="tabs">
       <button data-tab="pedidos" class="active">Bajo pedido</button>
+      <button data-tab="gastos">Gastos</button>
       <button data-tab="resumen">Resumen</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="ventas">Ventas</button>
       <button data-tab="abonos">Abonos</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="bodegas">Bodegas</button>
-      <button data-tab="gastos">Gastos</button>
     </nav>
 
     <main class="contenido">
@@ -851,7 +851,7 @@ function renderClientes() {
 }
 
 // ---------- RENDER: GASTOS ----------
-const CATEGORIAS_GASTO = ['Publicidad', 'Envíos', 'Empaques', 'Transporte', 'Arriendo', 'Servicios', 'Otro'];
+const CATEGORIAS_GASTO = ['Bajo pedido', 'Publicidad', 'Envíos', 'Empaques', 'Transporte', 'Arriendo', 'Servicios', 'Otro'];
 
 function gastosDelMes(list, key) {
   return list.filter(g => monthKey(g.fecha) === key).reduce((s,g) => s + (Number(g.monto)||0), 0);
