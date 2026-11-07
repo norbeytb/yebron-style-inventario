@@ -4,8 +4,7 @@
 let pedidos = [];
 let bodegas = [];
 let pedPagos = [];
-let pedFiltro = { estado: '', bodega: '', texto: '' };
-const ESTADOS_PED = [['pedido','Pedido'],['comprado','Comprado'],['enviado','Enviado'],['entregado','Entregado'],['cancelado','Cancelado']];
+let pedFiltro = { bodega: '', texto: '' };
 const NUEVA = '__nueva__';
 
 async function cargarPedidosDatos() {
@@ -28,19 +27,21 @@ function renderPedidos() {
   if (!el) return;
   const q = pedFiltro.texto.toLowerCase();
   const lista = pedidos.filter(p =>
-    (!pedFiltro.estado || p.estado === pedFiltro.estado) &&
     (!pedFiltro.bodega || String(p.bodegaId) === pedFiltro.bodega) &&
     (!q || (p.cliente + ' ' + p.referencia).toLowerCase().includes(q)));
   const activos = pedidos.filter(p => p.estado !== 'cancelado');
   const porCobrar = activos.reduce((s, p) => s + pedResta(p), 0);
   const ganancia = activos.reduce((s, p) => s + pedGanancia(p), 0);
-  const porComprar = pedidos.filter(p => p.estado === 'pedido').length;
+  const suma = (f) => activos.reduce((t, p) => t + f(p), 0);
 
   el.innerHTML = `
     <div class="grid-cards">
-      <div class="stat"><div class="label">Por comprar a bodega</div><div class="value">${porComprar}</div></div>
+      <div class="stat"><div class="label">Unidades</div><div class="value">${suma(p => p.unidades)}</div></div>
+      <div class="stat"><div class="label">Ventas</div><div class="value">${money(suma(p => p.venta))}</div></div>
+      <div class="stat"><div class="label">Costo</div><div class="value">${money(suma(p => p.costo))}</div></div>
+      <div class="stat"><div class="label">Envíos</div><div class="value">${money(suma(p => p.envio))}</div></div>
+      <div class="stat"><div class="label">Ganancia</div><div class="value">${money(ganancia)}</div></div>
       <div class="stat neg"><div class="label">Por cobrar</div><div class="value">${money(porCobrar)}</div></div>
-      <div class="stat"><div class="label">Ganancia (bajo pedido)</div><div class="value">${money(ganancia)}</div></div>
     </div>
     <div class="panel">
       <h2>Nuevo pedido</h2>
@@ -62,17 +63,15 @@ function renderPedidos() {
     <div class="panel">
       <h2>Pedidos (${lista.length})</h2>
       <div class="grid-form">
-        <div><select id="pfEstado"><option value="">Todos los estados</option>${ESTADOS_PED.map(([v,l]) => `<option value="${v}" ${pedFiltro.estado===v?'selected':''}>${l}</option>`).join('')}</select></div>
         <div><select id="pfBodega"><option value="">Todas las bodegas</option>${bodegas.map(b => `<option value="${b.id}" ${pedFiltro.bodega===String(b.id)?'selected':''}>${esc(b.nombre)}</option>`).join('')}</select></div>
         <div><input type="text" id="pfTexto" placeholder="Buscar cliente o modelo" value="${esc(pedFiltro.texto)}"></div>
       </div>
       ${lista.length ? `<div class="table-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Cliente</th><th>Modelo</th><th>Talla</th><th>Bodega</th><th>Venta</th><th>Debe</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Cliente</th><th>Modelo</th><th>Talla</th><th>Bodega</th><th>Unid.</th><th>Venta</th><th>Costo</th><th>Envío</th><th>Ganancia</th><th>Debe</th><th></th></tr></thead>
         <tbody>${lista.map(p => `<tr>
-          <td>${fmtDate(p.fecha)}</td><td>${esc(p.cliente)}</td><td>${esc(p.referencia) || '—'}${p.unidades > 1 ? ' ×' + p.unidades : ''}</td>
-          <td>${esc(p.talla) || '—'}</td><td>${esc(p.bodega) || '—'}</td><td>${money(p.venta)}</td>
+          <td>${fmtDate(p.fecha)}</td><td>${esc(p.cliente)}</td><td>${esc(p.referencia) || '—'}</td>
+          <td>${esc(p.talla) || '—'}</td><td>${esc(p.bodega) || '—'}</td><td>${p.unidades}</td><td>${money(p.venta)}</td><td>${money(p.costo)}</td><td>${money(p.envio)}</td><td>${money(pedGanancia(p))}</td>
           <td>${pedResta(p) ? money(pedResta(p)) : '✓'}</td>
-          <td><select onchange="cambiarEstadoPedido(${p.id}, this.value)">${ESTADOS_PED.map(([v,l]) => `<option value="${v}" ${p.estado===v?'selected':''}>${l}</option>`).join('')}</select></td>
           <td>${pedResta(p) ? `<button class="btn small" onclick="abrirPagoPedido(${p.id})">Abonar</button> ` : ''}<button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="empty">No hay pedidos con ese filtro.</div>'}
     </div>`;
@@ -91,12 +90,10 @@ function renderPedidos() {
     }), 'Pedido agregado');
   });
   const re = () => renderPedidos();
-  document.getElementById('pfEstado').onchange = (e) => { pedFiltro.estado = e.target.value; re(); };
   document.getElementById('pfBodega').onchange = (e) => { pedFiltro.bodega = e.target.value; re(); };
   document.getElementById('pfTexto').onchange = (e) => { pedFiltro.texto = e.target.value; re(); };
 }
 
-function cambiarEstadoPedido(id, estado) { guardar(() => Api.estadoPedido(id, estado), 'Estado actualizado'); }
 function borrarPedido(id) { showConfirm('¿Eliminar este pedido y sus abonos?', () => guardar(() => Api.eliminarPedido(id), 'Pedido eliminado')); }
 
 function abrirPagoPedido(id) {
