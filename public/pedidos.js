@@ -4,7 +4,7 @@
 let pedidos = [];
 let bodegas = [];
 let pedPagos = [];
-let pedFiltro = { bodega: '', texto: '' };
+let pedFiltro = { bodega: '', texto: '', desde: '', hasta: '' };
 const NUEVA = '__nueva__';
 
 async function cargarPedidosDatos() {
@@ -27,14 +27,32 @@ function renderPedidos() {
   if (!el) return;
   const q = pedFiltro.texto.toLowerCase();
   const lista = pedidos.filter(p =>
+    (!pedFiltro.desde || p.fecha >= pedFiltro.desde) &&
+    (!pedFiltro.hasta || p.fecha <= pedFiltro.hasta) &&
     (!pedFiltro.bodega || String(p.bodegaId) === pedFiltro.bodega) &&
     (!q || (p.cliente + ' ' + p.referencia).toLowerCase().includes(q)));
-  const activos = pedidos.filter(p => p.estado !== 'cancelado');
+  const activos = lista.filter(p => p.estado !== 'cancelado');
   const porCobrar = activos.reduce((s, p) => s + pedResta(p), 0);
   const ganancia = activos.reduce((s, p) => s + pedGanancia(p), 0);
   const suma = (f) => activos.reduce((t, p) => t + f(p), 0);
 
+  const etiqueta = pedFiltro.desde || pedFiltro.hasta
+    ? `Del ${pedFiltro.desde ? fmtDate(pedFiltro.desde) : 'inicio'} al ${pedFiltro.hasta ? fmtDate(pedFiltro.hasta) : 'hoy'}`
+    : 'Todo el tiempo';
   el.innerHTML = `
+    <div class="panel">
+      <div class="grid-form">
+        <div><label>Desde</label><input type="date" id="pfDesde" value="${pedFiltro.desde}"></div>
+        <div><label>Hasta</label><input type="date" id="pfHasta" value="${pedFiltro.hasta}"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+          <button class="btn small secondary" onclick="rangoPedidos('mes')">Este mes</button>
+          <button class="btn small secondary" onclick="rangoPedidos('mespasado')">Mes pasado</button>
+          <button class="btn small secondary" onclick="rangoPedidos('anio')">Este año</button>
+          <button class="btn small secondary" onclick="rangoPedidos('todo')">Todo</button>
+        </div>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Resumen: <strong>${etiqueta}</strong> · ${lista.length} pedidos</p>
+    </div>
     <div class="grid-cards">
       <div class="stat"><div class="label">Unidades</div><div class="value">${suma(p => p.unidades)}</div></div>
       <div class="stat"><div class="label">Ventas</div><div class="value">${money(suma(p => p.venta))}</div></div>
@@ -90,11 +108,27 @@ function renderPedidos() {
     }), 'Pedido agregado');
   });
   const re = () => renderPedidos();
+  document.getElementById('pfDesde').onchange = (e) => { pedFiltro.desde = e.target.value; re(); };
+  document.getElementById('pfHasta').onchange = (e) => { pedFiltro.hasta = e.target.value; re(); };
   document.getElementById('pfBodega').onchange = (e) => { pedFiltro.bodega = e.target.value; re(); };
   document.getElementById('pfTexto').onchange = (e) => { pedFiltro.texto = e.target.value; re(); };
 }
 
 function borrarPedido(id) { showConfirm('¿Eliminar este pedido y sus abonos?', () => guardar(() => Api.eliminarPedido(id), 'Pedido eliminado')); }
+
+function rangoPedidos(tipo) {
+  const hoy = todayISO(), a = Number(hoy.slice(0, 4)), m = Number(hoy.slice(5, 7));
+  const dos = (n) => String(n).padStart(2, '0');
+  const ultimo = (anio, mes) => new Date(anio, mes, 0).getDate();
+  if (tipo === 'mes') { pedFiltro.desde = `${a}-${dos(m)}-01`; pedFiltro.hasta = `${a}-${dos(m)}-${dos(ultimo(a, m))}`; }
+  else if (tipo === 'mespasado') {
+    const pm = m === 1 ? 12 : m - 1, pa = m === 1 ? a - 1 : a;
+    pedFiltro.desde = `${pa}-${dos(pm)}-01`; pedFiltro.hasta = `${pa}-${dos(pm)}-${dos(ultimo(pa, pm))}`;
+  }
+  else if (tipo === 'anio') { pedFiltro.desde = `${a}-01-01`; pedFiltro.hasta = `${a}-12-31`; }
+  else { pedFiltro.desde = ''; pedFiltro.hasta = ''; }
+  renderPedidos();
+}
 
 function abrirPagoPedido(id) {
   const p = pedidos.find(x => x.id === id); if (!p) return;
