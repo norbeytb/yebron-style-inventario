@@ -106,11 +106,11 @@ function renderPedidos() {
         <div><input type="text" id="pfTexto" placeholder="Buscar cliente o modelo" value="${esc(pedFiltro.texto)}"></div>
       </div>
       ${lista.length ? `<div class="table-scroll"><table>
-        <thead><tr><th>Fecha</th><th>Cliente</th><th>Modelo</th><th>Talla</th><th>Bodega</th><th>Unid.</th><th>Venta</th><th>Costo</th><th>Envío</th><th>Ganancia</th><th>Debe</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Cliente</th><th>Modelo</th><th>Talla</th><th>Bodega</th><th>Unid.</th><th>Venta</th><th>Costo</th><th>Envío</th><th>Ganancia</th><th>Resta</th><th></th></tr></thead>
         <tbody>${lista.map(p => `<tr>
           <td>${fmtDate(p.fecha)}</td><td>${esc(p.cliente)}</td><td>${esc(p.referencia) || '—'}</td>
           <td>${esc(p.talla) || '—'}</td><td>${esc(p.bodega) || '—'}</td><td>${p.unidades}</td><td>${money(p.venta)}</td><td>${money(p.costo)}</td><td>${money(p.envio)}</td><td>${money(pedGanancia(p))}</td>
-          <td>${pedResta(p) ? money(pedResta(p)) : '✓'}</td>
+          <td>${pedResta(p) > 0 ? `<span class="badge pendiente">${money(pedResta(p))}</span>` : `<span class="badge disponible">Pagado</span>`}</td>
           <td>${pedResta(p) ? `<button class="btn small" onclick="abrirPagoPedido(${p.id})">Abonar</button> ` : ''}<button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="empty">No hay pedidos con ese filtro.</div>'}
     </div>`;
