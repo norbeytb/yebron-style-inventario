@@ -23,6 +23,24 @@ function opcionesBodega(sel) {
   return `<option value="">— elegir —</option>${fr.map(o).join('')}${otras.length ? `<optgroup label="Otras">${otras.map(o).join('')}</optgroup>` : ''}<option value="${NUEVA}">➕ Otra bodega (agregar nueva)…</option>`;
 }
 
+// Desplegables de talla (EUR 36 a 44) y unidades (1 a 10). Si un pedido ya
+// trae un valor fuera de esa lista (p. ej. importado del Excel), se agrega
+// como opción para no perderlo al editar.
+const TALLAS = Array.from({ length: 9 }, (_, i) => 'EUR ' + (36 + i));
+const UNIDADES = Array.from({ length: 10 }, (_, i) => i + 1);
+
+function opcionesTalla(sel) {
+  const actual = String(sel || '').trim();
+  const lista = actual && !TALLAS.includes(actual) ? [actual, ...TALLAS] : TALLAS;
+  return `<option value="">— elegir —</option>${lista.map(t => `<option value="${esc(t)}" ${t === actual ? 'selected' : ''}>${esc(t)}</option>`).join('')}`;
+}
+
+function opcionesUnidades(sel) {
+  const actual = Number(sel) || 1;
+  const lista = UNIDADES.includes(actual) ? UNIDADES : [...UNIDADES, actual].sort((a, b) => a - b);
+  return lista.map(n => `<option value="${n}" ${n === actual ? 'selected' : ''}>${n}</option>`).join('');
+}
+
 function renderPedidos() {
   const el = document.getElementById('tab-pedidos');
   if (!el) return;
@@ -76,8 +94,8 @@ function renderPedidos() {
         <div><label>Bodega</label><select name="bodega">${opcionesBodega('')}</select>
           <input type="text" name="bodegaNueva" placeholder="Nombre de la nueva bodega" style="display:none;margin-top:6px"></div>
         <div><label>Modelo / referencia</label><input type="text" name="referencia" placeholder="Nike Zoom rosados"></div>
-        <div><label>Talla</label><input type="text" name="talla" placeholder="EUR 37"></div>
-        <div><label>Unidades</label><input type="number" name="unidades" min="1" value="1"></div>
+        <div><label>Talla</label><select name="talla">${opcionesTalla('')}</select></div>
+        <div><label>Unidades</label><select name="unidades">${opcionesUnidades(1)}</select></div>
         <div><label>Precio de venta</label><input type="number" name="venta" min="0"></div>
         <div><label>Costo (bodega)</label><input type="number" name="costo" min="0"></div>
         <div><label>Envío</label><input type="number" name="envio" min="0"></div>
@@ -177,8 +195,8 @@ function abrirEditarPedido(id) {
         <div class="modal-row"><label>Bodega</label><select name="bodega">${opcionesBodega(p.bodegaId)}</select>
           <input type="text" name="bodegaNueva" placeholder="Nombre de la nueva bodega" style="display:none;margin-top:6px"></div>
         <div class="modal-row"><label>Modelo / referencia</label><input type="text" name="referencia" value="${esc(p.referencia)}"></div>
-        <div class="modal-row"><label>Talla</label><input type="text" name="talla" value="${esc(p.talla)}"></div>
-        <div class="modal-row"><label>Unidades</label><input type="number" name="unidades" min="1" value="${p.unidades}"></div>
+        <div class="modal-row"><label>Talla</label><select name="talla">${opcionesTalla(p.talla)}</select></div>
+        <div class="modal-row"><label>Unidades</label><select name="unidades">${opcionesUnidades(p.unidades)}</select></div>
         <div class="modal-row"><label>Precio de venta</label><input type="number" name="venta" min="0" value="${num(p.venta)}"></div>
         <div class="modal-row"><label>Costo (bodega)</label><input type="number" name="costo" min="0" value="${num(p.costo)}"></div>
         <div class="modal-row"><label>Envío (puedes dejarlo vacío hasta que llegue)</label><input type="number" name="envio" min="0" value="${num(p.envio)}"></div>
