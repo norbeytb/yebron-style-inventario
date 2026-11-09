@@ -23,6 +23,8 @@ export interface PedidoPago { id: number; pedidoId: number; monto: number; fecha
 export interface CrearPedidoDto {
   fecha?: string; cliente: string; bodegaId?: number; bodegaNueva?: string; referencia?: string; talla?: string;
   unidades?: number; venta?: number; costo?: number; envio?: number; estado?: string; nota?: string; abono?: number;
+  // Solo al editar: lo que todavía debe el cliente (ajusta los abonos).
+  resta?: number | string;
 }
 
 const SELECT_PEDIDOS = `
@@ -126,9 +128,43 @@ export class PedidosService {
     if (dto.costo !== undefined) poner('costo', numeroNoNegativo(dto.costo, 'El costo'));
     if (dto.envio !== undefined) poner('envio', numeroNoNegativo(dto.envio, 'El envío'));
     if (dto.nota !== undefined) poner('nota', texto(dto.nota));
-    if (!sets.length) return this.obtener(id);
-    const r = await this.db.pool().query(`UPDATE pedidos SET ${sets.join(', ')} WHERE id = $1`, vals);
-    if (!r.rowCount) throw new NotFoundException('No existe ese pedido.');
+    const cambiaResta = dto.resta !== undefined && dto.resta !== null && String(dto.resta) !== '';
+    const resta = cambiaResta ? numeroNoNegativo(dto.resta, 'Lo que resta') : 0;
+
+    // Todo en una transacción: o se guarda el pedido con sus abonos ajustados, o nada.
+    await this.db.transaccion(async (client) => {
+      if (sets.length) {
+        const r = await client.query(`UPDATE pedidos SET ${sets.join(', ')} WHERE id = $1`, vals);
+        if (!r.rowCount) throw new NotFoundException('No existe ese pedido.');
+      }
+      const actual = await client.query(`SELECT venta FROM pedidos WHERE id = $1 FOR UPDATE`, [id]);
+      if (!actual.rowCount) throw new NotFoundException('No existe ese pedido.');
+      if (!cambiaResta) return;
+
+      // "Resta" manda: lo abonado tiene que ser venta − resta. Si falta, se
+      // suma un abono de ajuste; si sobra, se recortan los abonos más recientes.
+      const venta = Number(actual.rows[0].venta);
+      if (resta > venta) throw new BadRequestException('Lo que resta no puede ser mayor que la venta.');
+      const objetivo = venta - resta;
+      const pagos = (await client.query(`SELECT id, monto FROM pedido_pagos WHERE pedido_id = $1 ORDER BY fecha DESC, id DESC`, [id])).rows;
+      const pagado = pagos.reduce((t, p) => t + Number(p.monto), 0);
+      if (objetivo > pagado) {
+        await client.query(`INSERT INTO pedido_pagos (pedido_id, monto, fecha, nota) VALUES ($1, $2, $3, 'Ajuste al editar el pedido')`, [id, objetivo - pagado, hoyColombia()]);
+      } else {
+        let exceso = pagado - objetivo;
+        for (const p of pagos) {
+          if (exceso <= 0) break;
+          const monto = Number(p.monto);
+          if (monto <= exceso) {
+            await client.query(`DELETE FROM pedido_pagos WHERE id = $1`, [p.id]);
+            exceso -= monto;
+          } else {
+            await client.query(`UPDATE pedido_pagos SET monto = $2 WHERE id = $1`, [p.id, monto - exceso]);
+            exceso = 0;
+          }
+        }
+      }
+    });
     return this.obtener(id);
   }
 
