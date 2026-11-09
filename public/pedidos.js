@@ -183,6 +183,8 @@ function rangoPedidos(tipo) {
   renderPedidos();
 }
 
+function pagosDe(pedidoId) { return pedPagos.filter(a => a.pedidoId === pedidoId); }
+
 function abrirEditarPedido(id) {
   const p = pedidos.find(x => x.id === id); if (!p) return;
   const num = (v) => (Number(v) ? v : '');
@@ -200,6 +202,8 @@ function abrirEditarPedido(id) {
         <div class="modal-row"><label>Precio de venta</label><input type="number" name="venta" min="0" value="${num(p.venta)}"></div>
         <div class="modal-row"><label>Costo (bodega)</label><input type="number" name="costo" min="0" value="${num(p.costo)}"></div>
         <div class="modal-row"><label>Envío (puedes dejarlo vacío hasta que llegue)</label><input type="number" name="envio" min="0" value="${num(p.envio)}"></div>
+        <div class="modal-row"><label>Resta (lo que todavía debe)</label><input type="number" name="resta" min="0" value="${pedResta(p)}">
+          <div class="muted" style="margin-top:4px">Abonado: ${money(p.pagado)}${pagosDe(p.id).map(a => ` · ${fmtDate(a.fecha)} ${money(a.monto)}`).join('')}<br>Si cambias la resta, los abonos se ajustan solos.</div></div>
         <div class="modal-actions"><button type="button" class="btn secondary" onclick="closeModal()">Cancelar</button><button class="btn" type="submit">Guardar cambios</button></div>
       </form></div></div>`;
   const f = document.getElementById('formEditarPedido');
@@ -213,6 +217,9 @@ function abrirEditarPedido(id) {
       unidades: Number(f.unidades.value) || 1, venta: Number(f.venta.value) || 0, costo: Number(f.costo.value) || 0, envio: Number(f.envio.value) || 0,
     };
     if (nueva) datos.bodegaNueva = f.bodegaNueva.value.trim(); else datos.bodegaId = Number(f.bodega.value) || null;
+    // Solo se manda la resta si la cambiaste: así, si solo editas la venta,
+    // los abonos quedan como estaban y la resta se recalcula sola.
+    if (f.resta.value !== '' && Number(f.resta.value) !== pedResta(p)) datos.resta = Number(f.resta.value);
     if (await guardar(() => Api.editarPedido(id, datos), 'Pedido actualizado')) closeModal();
   });
 }
@@ -227,7 +234,8 @@ function abrirPagoPedido(id) {
       <p class="muted">${esc(p.referencia)} ${esc(p.talla)} · Venta ${money(p.venta)} · <strong style="color:var(--red)">Debe ${money(resta)}</strong></p>
       <form id="formPago">
         <div class="modal-row"><label>Fecha</label><input type="date" name="fecha" value="${todayISO()}" required></div>
-        <div class="modal-row"><label>Monto</label><input type="number" name="monto" min="1" max="${resta}" value="${resta}" required></div>
+        <div class="modal-row"><label>Monto del abono</label><input type="number" name="monto" min="1" max="${resta}" placeholder="50000" required>
+          <button type="button" class="btn small secondary" style="margin-top:6px" onclick="document.querySelector('#formPago [name=monto]').value = ${resta}">Pagó todo lo que debía</button></div>
         <div class="modal-row"><label>Nota</label><input type="text" name="nota"></div>
         ${prev.length ? `<div class="modal-row"><label>Abonos anteriores</label>${prev.map(a => `<div class="muted">${fmtDate(a.fecha)} · ${money(a.monto)} <a href="#" onclick="event.preventDefault();quitarPago(${a.id})">quitar</a></div>`).join('')}</div>` : ''}
         <div class="modal-actions"><button type="button" class="btn secondary" onclick="closeModal()">Cancelar</button><button class="btn" type="submit">Registrar</button></div>
