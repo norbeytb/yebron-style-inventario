@@ -10,7 +10,9 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { DbService } from './db.service';
 import { fechaOpcional, formatearFecha, hoyColombia, numeroNoNegativo, texto } from './utilidades';
 
-export const ESTADOS_PEDIDO = ['pedido', 'comprado', 'enviado', 'entregado', 'cancelado'];
+// 'sobrante' = par que se trajo para un cliente, no le quedó y no se devolvió a la
+// bodega: vive en la sección "Inventario bajo pedido" (no se mezcla con el inventario propio).
+export const ESTADOS_PEDIDO = ['pedido', 'comprado', 'enviado', 'entregado', 'cancelado', 'sobrante'];
 
 export interface Bodega { id: number; nombre: string; frecuente: boolean; activa: boolean }
 export interface Pedido {
