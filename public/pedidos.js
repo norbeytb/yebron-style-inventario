@@ -13,8 +13,10 @@ async function cargarPedidosDatos() {
   pedidos = d.pedidos; bodegas = d.bodegas; pedPagos = d.pagos;
 }
 
-function pedResta(p) { return p.estado === 'cancelado' ? 0 : Math.max(p.venta - p.pagado, 0); }
-function pedGanancia(p) { return p.estado === 'cancelado' ? 0 : p.venta - p.costo - p.envio; }
+// Cancelado y "sobrante" (par que no le quedó al cliente) no cuentan como venta.
+function pedActivo(p) { return p.estado !== 'cancelado' && p.estado !== 'sobrante'; }
+function pedResta(p) { return pedActivo(p) ? Math.max(p.venta - p.pagado, 0) : 0; }
+function pedGanancia(p) { return pedActivo(p) ? p.venta - p.costo - p.envio : 0; }
 
 function opcionesBodega(sel) {
   const act = bodegas.filter(b => b.activa);
@@ -46,11 +48,12 @@ function renderPedidos() {
   if (!el) return;
   const q = pedFiltro.texto.toLowerCase();
   const lista = pedidos.filter(p =>
+    p.estado !== 'sobrante' &&
     (!pedFiltro.desde || p.fecha >= pedFiltro.desde) &&
     (!pedFiltro.hasta || p.fecha <= pedFiltro.hasta) &&
     (!pedFiltro.bodega || String(p.bodegaId) === pedFiltro.bodega) &&
     (!q || (p.cliente + ' ' + p.referencia).toLowerCase().includes(q)));
-  const activos = lista.filter(p => p.estado !== 'cancelado');
+  const activos = lista.filter(pedActivo);
   const gastosRango = gastos.filter(g => g.categoria === CATEGORIA_GASTO_PEDIDOS &&
     (!pedFiltro.desde || g.fecha >= pedFiltro.desde) && (!pedFiltro.hasta || g.fecha <= pedFiltro.hasta))
     .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
@@ -129,7 +132,7 @@ function renderPedidos() {
           <td>${fmtDate(p.fecha)}</td><td>${esc(p.cliente)}</td><td>${esc(p.referencia) || '—'}</td>
           <td>${esc(p.talla) || '—'}</td><td>${esc(p.bodega) || '—'}</td><td>${p.unidades}</td><td>${money(p.venta)}</td><td>${money(p.costo)}</td><td>${money(p.envio)}</td><td>${money(pedGanancia(p))}</td>
           <td>${pedResta(p) > 0 ? `<span class="badge pendiente">${money(pedResta(p))}</span>` : `<span class="badge disponible">Pagado</span>`}</td>
-          <td>${pedResta(p) ? `<button class="btn small" onclick="abrirPagoPedido(${p.id})">Abonar</button> ` : ''}<button class="btn small secondary" onclick="abrirEditarPedido(${p.id})">Editar</button> <button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
+          <td>${pedResta(p) ? `<button class="btn small" onclick="abrirPagoPedido(${p.id})">Abonar</button> ` : ''}<button class="btn small secondary" onclick="abrirEditarPedido(${p.id})">Editar</button> <button class="btn small secondary" onclick="transferirAInventario(${p.id})">Transferir a inventario</button> <button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="empty">No hay pedidos con ese filtro.</div>'}
     </div>`;
 
@@ -181,6 +184,73 @@ function rangoPedidos(tipo) {
   else if (tipo === 'anio') { pedFiltro.desde = `${a}-01-01`; pedFiltro.hasta = `${a}-12-31`; }
   else { pedFiltro.desde = ''; pedFiltro.hasta = ''; }
   renderPedidos();
+}
+
+// ---------- Inventario bajo pedido ----------
+// Zapatos que se trajeron para un cliente, no le quedaron y no se devolvieron a
+// la bodega. "Volver a pedidos" los regresa si se venden a otro cliente.
+
+function transferirAInventario(id) {
+  const p = pedidos.find(x => x.id === id); if (!p) return;
+  const aviso = p.pagado > 0 ? ` Ojo: tiene abonos por ${money(p.pagado)} — acordate de devolverle esa plata al cliente.` : '';
+  showConfirm(`¿Transferir "${esc(p.referencia)} ${esc(p.talla)}" de ${esc(p.cliente)} a Inventario bajo pedido? Sale de Bajo pedido (ya no cuenta como venta).${aviso}`,
+    () => guardar(() => Api.estadoPedido(id, 'sobrante'), 'Pasó a Inventario bajo pedido'));
+}
+
+function volverAPedidos(id) { guardar(() => Api.estadoPedido(id, 'entregado'), 'Volvió a Bajo pedido'); }
+
+function renderStockPedido() {
+  const el = document.getElementById('tab-stockpedido');
+  if (!el) return;
+  const lista = pedidos.filter(p => p.estado === 'sobrante').sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  const pares = lista.reduce((t, p) => t + p.unidades, 0);
+  const costo = lista.reduce((t, p) => t + p.costo + p.envio, 0);
+  el.innerHTML = `
+    <div class="grid-cards">
+      <div class="stat"><div class="label">Pares en mano</div><div class="value">${pares}</div></div>
+      <div class="stat"><div class="label">Invertido (costo + envío)</div><div class="value">${money(costo)}</div></div>
+    </div>
+    <div class="panel">
+      <h2>Agregar zapato</h2>
+      <p class="muted" style="margin-top:0">Para un par que trajiste y no tiene cliente. Si venía de un pedido, usa "Transferir a inventario" en Bajo pedido.</p>
+      <form id="formStockPedido" class="grid-form">
+        <div><label>Fecha</label><input type="date" name="fecha" value="${todayISO()}" required></div>
+        <div><label>Bodega</label><select name="bodega">${opcionesBodega('')}</select>
+          <input type="text" name="bodegaNueva" placeholder="Nombre de la nueva bodega" style="display:none;margin-top:6px"></div>
+        <div><label>Modelo / referencia</label><input type="text" name="referencia" required></div>
+        <div><label>Talla</label><select name="talla">${opcionesTalla('')}</select></div>
+        <div><label>Unidades</label><select name="unidades">${opcionesUnidades(1)}</select></div>
+        <div><label>Costo (bodega)</label><input type="number" name="costo" min="0"></div>
+        <div><label>Envío</label><input type="number" name="envio" min="0"></div>
+        <div><button class="btn" type="submit">Agregar</button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Inventario bajo pedido (${lista.length})</h2>
+      ${lista.length ? `<div class="table-scroll"><table>
+        <thead><tr><th>Fecha</th><th>Modelo</th><th>Talla</th><th>Bodega</th><th>Unid.</th><th>Costo</th><th>Envío</th><th>Era de</th><th></th></tr></thead>
+        <tbody>${lista.map(p => `<tr>
+          <td>${fmtDate(p.fecha)}</td><td>${esc(p.referencia) || '—'}</td><td>${esc(p.talla) || '—'}</td><td>${esc(p.bodega) || '—'}</td>
+          <td>${p.unidades}</td><td>${money(p.costo)}</td><td>${money(p.envio)}</td><td>${p.cliente === 'Sin cliente' ? '—' : esc(p.cliente)}</td>
+          <td><button class="btn small secondary" onclick="abrirEditarPedido(${p.id})">Editar</button>
+            <button class="btn small secondary" onclick="volverAPedidos(${p.id})">Volver a pedidos</button>
+            <button class="btn small danger" onclick="borrarPedido(${p.id})">✕</button></td>
+        </tr>`).join('')}</tbody></table></div>`
+        : '<div class="empty">No hay zapatos en mano. Los que no le queden a un cliente aparecen acá con "Transferir a inventario".</div>'}
+    </div>`;
+
+  const f = document.getElementById('formStockPedido');
+  f.bodega.addEventListener('change', () => { f.bodegaNueva.style.display = f.bodega.value === NUEVA ? 'block' : 'none'; if (f.bodega.value === NUEVA) f.bodegaNueva.focus(); });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nueva = f.bodega.value === NUEVA;
+    if (nueva && !f.bodegaNueva.value.trim()) return showToast('Escribí el nombre de la nueva bodega.');
+    await guardar(() => Api.crearPedido({
+      fecha: f.fecha.value, cliente: 'Sin cliente', estado: 'sobrante', referencia: f.referencia.value.trim(), talla: f.talla.value,
+      unidades: Number(f.unidades.value) || 1, costo: Number(f.costo.value) || 0, envio: Number(f.envio.value) || 0,
+      bodegaId: nueva ? undefined : Number(f.bodega.value) || undefined, bodegaNueva: nueva ? f.bodegaNueva.value.trim() : undefined,
+    }), 'Agregado a Inventario bajo pedido');
+  });
 }
 
 function pagosDe(pedidoId) { return pedPagos.filter(a => a.pedidoId === pedidoId); }
@@ -251,7 +321,7 @@ function renderBodegas() {
   const el = document.getElementById('tab-bodegas');
   if (!el) return;
   const filas = bodegas.map(b => {
-    const ps = pedidos.filter(p => p.bodegaId === b.id && p.estado !== 'cancelado');
+    const ps = pedidos.filter(p => p.bodegaId === b.id && pedActivo(p));
     return { b, n: ps.length, costo: ps.reduce((s, p) => s + p.costo, 0), ganancia: ps.reduce((s, p) => s + pedGanancia(p), 0), cobrar: ps.reduce((s, p) => s + pedResta(p), 0) };
   }).sort((a, b) => b.n - a.n);
   el.innerHTML = `<div class="panel"><h2>Bodegas</h2>

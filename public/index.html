@@ -213,6 +213,7 @@
   <div class="layout">
     <nav class="tabs">
       <button data-tab="pedidos" class="active">Bajo pedido</button>
+      <button data-tab="stockpedido">Inventario bajo pedido</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="resumen">Resumen</button>
       <button data-tab="inventario">Inventario</button>
@@ -224,6 +225,7 @@
 
     <main class="contenido">
       <div id="tab-pedidos"></div>
+      <div id="tab-stockpedido" style="display:none"></div>
       <div id="tab-resumen" style="display:none"></div>
       <div id="tab-inventario" style="display:none"></div>
       <div id="tab-ventas" style="display:none"></div>
@@ -1076,7 +1078,7 @@ function showConfirm(msg, onConfirm) {
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 
 // ---------- TABS ----------
-const TABS = ['pedidos','resumen','inventario','ventas','abonos','clientes','bodegas','gastos'];
+const TABS = ['pedidos','stockpedido','resumen','inventario','ventas','abonos','clientes','bodegas','gastos'];
 
 function renderAll() {
   renderResumen();
@@ -1086,6 +1088,7 @@ function renderAll() {
   renderClientes();
   renderGastos();
   renderPedidos();
+  renderStockPedido();
   renderBodegas();
 }
 
